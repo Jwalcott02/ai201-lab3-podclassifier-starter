@@ -96,7 +96,9 @@ makes parsing reliable? Think about: a single label on its own line?
 A structured format like "Label: X / Reasoning: Y"? JSON?
 What are the tradeoffs?]
 ```
-
+Request JSON format with exactly two keys: "label" and "reasoning".
+Explicitly instruct the LLM to return only JSON with no extra text.
+If json.loads() fails, return {"label": "unknown", "reasoning": "Sorry, could not parse a valid response."}.
 ---
 
 **Edge cases to handle in the prompt:**
@@ -105,7 +107,12 @@ What are the tradeoffs?]
 [blank — what if labeled_examples is empty? What if the description is very
 short? How does your prompt handle these?]
 ```
+If labeled_examples is empty: add a fallback instruction in the prompt telling 
+the LLM to rely on the taxonomy definitions alone, and add a conditional in 
+the code to handle this case.
 
+If the description is very short: return {"label": "unknown", "reasoning": 
+"Please provide more info about your query."}
 ---
 
 ## classify_episode(description, labeled_examples)
@@ -163,6 +170,10 @@ Extract the response text from:
 What string operations or parsing logic do you need?
 This depends on the output format you chose in build_few_shot_prompt.]
 ```
+Take the raw response text and call .strip() to remove whitespace.
+Pass the cleaned string to json.loads() to parse it into a dict.
+Extract result["label"] and result["reasoning"] from the parsed dict.
+If json.loads() fails, return {"label": "unknown", "reasoning": "Sorry, could not parse a valid response."}.
 
 ---
 
@@ -172,7 +183,9 @@ This depends on the output format you chose in build_few_shot_prompt.]
 [blank — what do you do if the LLM returns a label that isn't in VALID_LABELS?
 What should label be set to?]
 ```
-
+Check if the parsed label is in VALID_LABELS. If it is not, set label to 
+"unknown" and reasoning to an explanation that the returned label was not 
+recognized and the user should provide more context.
 ---
 
 **Step 5 — Handle errors gracefully:**
@@ -182,7 +195,13 @@ What should label be set to?]
 What should the function return if something fails?
 Hint: the evaluation loop runs 20 calls — one bad response shouldn't crash everything.]
 ```
+Wrap the entire function in a try/except block to catch any errors — 
+network failures, timeouts, or API unavailability. If an exception is caught, 
+return {"label": "unknown", "reasoning": "An error occurred while contacting 
+the API. Please try again."}.
 
+This ensures that one failed call does not crash the evaluation loop when 
+classify_episode() is called 20 times.
 ---
 
 ### Return value structure
